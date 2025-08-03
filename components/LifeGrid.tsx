@@ -1,20 +1,62 @@
 "use client";
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useMemo } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { Calendar22 as DatePickerWithInput } from "./DatePickerWithInput";
+import { Controller } from "react-hook-form";
 
-interface Day {
-  id: number;
-  x: number;
-  y: number;
-  isPast: boolean;
-  week: number;
-  year: number;
-}
+// Day interface for future hover functionality
+// interface Day {
+//   id: number;
+//   x: number;
+//   y: number;
+//   isPast: boolean;
+//   week: number;
+//   year: number;
+// }
+
+const formSchema = z.object({
+  birthDate: z
+    .date({
+      message: "Please select your birth date",
+    })
+    .refine(
+      (date) => {
+        const today = new Date();
+        return date <= today;
+      },
+      {
+        message: "Birth date must be in the past",
+      }
+    ),
+  lifeExpectancy: z
+    .number()
+    .min(50, "Life expectancy must be at least 50 years")
+    .max(120, "Life expectancy cannot exceed 120 years"),
+});
+
+type FormData = z.infer<typeof formSchema>;
 
 const LifeGrid = () => {
-  const [birthDate, setBirthDate] = useState<string>("");
-  const [lifeExpectancy, setLifeExpectancy] = useState<number>(75);
-  const [hoveredDay, setHoveredDay] = useState<Day | null>(null);
-  const [showTooltip, setShowTooltip] = useState<boolean>(false);
+  // Commented out hover functionality for now
+  // const [hoveredDay, setHoveredDay] = useState<Day | null>(null);
+  // const [showTooltip, setShowTooltip] = useState<boolean>(false);
+
+  const form = useForm<FormData>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      lifeExpectancy: 75,
+    },
+  });
+
+  const {
+    watch,
+    control,
+    formState: { errors },
+  } = form;
+  const birthDate = watch("birthDate");
+  const lifeExpectancy = watch("lifeExpectancy") || 75;
 
   // Calculate days based on life expectancy
   const TOTAL_DAYS = lifeExpectancy * 365;
@@ -28,9 +70,8 @@ const LifeGrid = () => {
   const daysPassed = useMemo(() => {
     if (!birthDate) return 0;
 
-    const birth = new Date(birthDate);
     const today = new Date();
-    const diffTime = today.getTime() - birth.getTime();
+    const diffTime = today.getTime() - birthDate.getTime();
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
     return Math.max(0, diffDays);
@@ -49,14 +90,22 @@ const LifeGrid = () => {
   const monthsLived = Math.floor(daysPassed / 30.44); // Average days per month
 
   const days = useMemo(() => {
-    const generatedDays = [];
+    const generatedDays: Array<{
+      id: number;
+      x: number;
+      y: number;
+      isPast: boolean;
+      week: number;
+      year: number;
+    }> = [];
+
     for (let i = 0; i < TOTAL_DAYS; i++) {
       const isPast = i < daysPassed;
       const row = Math.floor(i / GRID_COLS);
       const col = i % GRID_COLS;
 
       generatedDays.push({
-        id: i,
+        id: i, // This ID helps React efficiently update only changed squares
         x: col * SQUARE_SPACING,
         y: row * SQUARE_SPACING,
         isPast,
@@ -72,16 +121,13 @@ const LifeGrid = () => {
     setShowTooltip(true);
   }, []); */
 
-  const handleDayLeave = useCallback(() => {
-    setShowTooltip(false);
-    setHoveredDay(null);
-  }, []);
+  // Commented out hover functionality for now
+  // const handleDayLeave = useCallback(() => {
+  //   setShowTooltip(false);
+  //   setHoveredDay(null);
+  // }, []);
 
-  const isValidDate = (dateString: string): boolean => {
-    const date = new Date(dateString);
-    const today = new Date();
-    return !isNaN(date.getTime()) && date <= today;
-  };
+  const isValidBirthDate = birthDate && !errors.birthDate;
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
@@ -106,43 +152,58 @@ const LifeGrid = () => {
           </p>
 
           {/* Inputs */}
-          <div className="max-w-2xl mx-auto mb-6 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Enter your birth date:
-                </label>
-                <input
-                  type="date"
-                  value={birthDate}
-                  onChange={(e) => setBirthDate(e.target.value)}
-                  max={new Date().toISOString().split("T")[0]}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          <div className="max-w-lg mx-auto mb-8">
+            <div className="bg-white p-6 rounded-lg shadow-sm border">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                Tell us about yourself
+              </h3>
+              <div className="space-y-4">
+                <Controller
+                  name="birthDate"
+                  control={control}
+                  render={({ field }) => (
+                    <DatePickerWithInput
+                      value={field.value}
+                      onChange={field.onChange}
+                      error={errors.birthDate?.message}
+                    />
+                  )}
                 />
-                {birthDate && !isValidDate(birthDate) && (
-                  <p className="text-red-500 text-sm mt-1">
-                    Please enter a valid date in the past
-                  </p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Life expectancy (years):
-                </label>
-                <input
-                  type="number"
-                  value={lifeExpectancy}
-                  onChange={(e) => setLifeExpectancy(Number(e.target.value))}
-                  min="50"
-                  max="120"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Life expectancy (years):
+                  </label>
+                  <Controller
+                    name="lifeExpectancy"
+                    control={control}
+                    render={({ field }) => (
+                      <input
+                        type="number"
+                        value={field.value || 75}
+                        onChange={(e) => field.onChange(Number(e.target.value))}
+                        min="50"
+                        max="120"
+                        className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                          errors.lifeExpectancy
+                            ? "border-red-500"
+                            : "border-gray-300"
+                        }`}
+                      />
+                    )}
+                  />
+                  {errors.lifeExpectancy && (
+                    <p className="text-red-500 text-sm mt-1">
+                      {errors.lifeExpectancy.message}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Stats */}
-          {birthDate && isValidDate(birthDate) && (
+          {/* Stats and Grid - Only show after birth date is selected */}
+          {isValidBirthDate && (
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 max-w-4xl mx-auto mb-6">
                 <div className="bg-white p-4 rounded-lg shadow">
@@ -266,7 +327,8 @@ const LifeGrid = () => {
 
                   {days.map((day, index) => (
                     <rect
-                      key={day.id}
+                      key={`day-${day.id}`} // Unique key for efficient React updates
+                      data-day-id={day.id} // Helpful for debugging/testing
                       x={day.x}
                       y={day.y}
                       width={SQUARE_SIZE}
@@ -283,7 +345,7 @@ const LifeGrid = () => {
                           : "none",
                       }}
                       // onMouseEnter={() => handleDayHover(day)}
-                      onMouseLeave={handleDayLeave}
+                      // onMouseLeave={handleDayLeave}
                     />
                   ))}
                 </svg>
@@ -353,7 +415,7 @@ const LifeGrid = () => {
             Remember: each day is a gift. Make it count.
           </p>
 
-          {birthDate && isValidDate(birthDate) && (
+          {isValidBirthDate && (
             <div className="mt-4 text-xs text-gray-400">
               <p>Time is the most valuable resource we have.</p>
               <p>
